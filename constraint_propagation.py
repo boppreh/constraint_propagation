@@ -1,14 +1,13 @@
 from random import random
 
-def propagate(cell, value, cell_candidates, is_pair_valid):
+def propagate(cell, cell_candidates, is_pair_valid):
+    is_compatible = lambda other_cell, other_value: any(is_pair_valid(cell, value, other_cell, other_value) for value in cell_candidates[cell])
     for other_cell, other_candidates in cell_candidates.items():
         if other_cell == cell: continue
-        new_candidates = tuple(other_value for other_value in other_candidates if is_pair_valid(cell, value, other_cell, other_value))
+        new_candidates = tuple(other_value for other_value in other_candidates if is_compatible(other_cell, other_value))
         if not new_candidates: return False
         cell_candidates[other_cell] = new_candidates
-        if len(other_candidates) > 1 and len(new_candidates) == 1:
-            if not propagate(other_cell, new_candidates[0], cell_candidates, is_pair_valid):
-                return False
+        if len(other_candidates) != len(new_candidates) and not propagate(other_cell, cell_candidates, is_pair_valid): return False
     return True
 
 def guess_and_backtrack(cell_candidates, is_pair_valid):
@@ -21,13 +20,12 @@ def guess_and_backtrack(cell_candidates, is_pair_valid):
     for value in candidates:
         cell_candidates_copy = cell_candidates.copy()
         cell_candidates_copy[pending_cell] = (value,)
-        if propagate(pending_cell, value, cell_candidates_copy, is_pair_valid):
+        if propagate(pending_cell, cell_candidates_copy, is_pair_valid):
             yield from guess_and_backtrack(cell_candidates_copy, is_pair_valid)
 
 def solve(cell_candidates, is_pair_valid):
     for cell, candidates in cell_candidates.items():
-        if len(candidates) == 1:
-            assert propagate(cell, candidates[0], cell_candidates, is_pair_valid)
+        assert propagate(cell, cell_candidates, is_pair_valid)
 
     return guess_and_backtrack(cell_candidates, is_pair_valid)
 
@@ -102,7 +100,7 @@ if __name__ == '__main__':
     for solution in solve(cell_candidates, is_zebra_pair_valid):
         assert all((FISH in value) == (GERMAN in value) for value in solution.values()), solution
         pprint(solution)
-    exit()
+    
     ###
     box = lambda p: (p[0] // 3, p[1] // 3)
     def is_sudoku_pair_valid(cell, value, other_cell, other_value):
@@ -134,7 +132,7 @@ if __name__ == '__main__':
 
     for i, solution in zip(range(100), solve(empty, is_sudoku_pair_valid)):
         print_sudoku(solution)
-    
+    exit()
     # Miracle Sudoku
     # https://www.youtube.com/watch?v=yKf9aUIxdb4
     kings_moves = lambda p: [(p[0]+x, p[1]+y) for x, y in product([-1, 0, 1], [-1, 0, 1]) if x or y]
@@ -150,9 +148,11 @@ if __name__ == '__main__':
     cell_candidates[(3, 5)] = [1]
     cell_candidates[(7, 6)] = [2]
     for solution in solve(cell_candidates, is_miracle_sudoku_pair_valid):
+        print('Miracle found!')
         pprint(solution)
     cell_candidates = dict({index: range(1, 10) for index in indices})
     cell_candidates[(4, 2)] = [4]
     cell_candidates[(2, 3)] = [2]
     for solution in solve(cell_candidates, is_miracle_sudoku_pair_valid):
+        print('Miracle 2 found!')
         pprint(solution)
