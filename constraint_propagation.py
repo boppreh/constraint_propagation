@@ -11,12 +11,12 @@ def propagate(cell, cell_candidates, is_pair_valid):
     return True
 
 def guess_and_backtrack(cell_candidates, is_pair_valid):
-    try:
-        pending_cell, candidates = next((cell, candidates) for cell, candidates in cell_candidates.items() if len(candidates) != 1)
-    except StopIteration:
+    pending = [(cell, candidates) for cell, candidates in cell_candidates.items() if len(candidates) != 1]
+    if not pending:
         yield {cell: candidates[0] for cell, candidates in cell_candidates.items()}
         return
 
+    pending_cell, candidates = min(pending, key=lambda p: len(p[1])) # TODO: is selecting the cell with fewest candidates the best strategy?
     for value in candidates:
         cell_candidates_copy = cell_candidates.copy()
         cell_candidates_copy[pending_cell] = (value,)
@@ -33,7 +33,7 @@ def validate(solution, is_pair_valid):
     for cell, value in solution.items():
         for other_cell, other_value in solution.items():
             if cell == other_cell: continue
-            assert is_pair_valid(cell, value, other_cell, other_value)
+            assert is_pair_valid(cell, value, other_cell, other_value), (cell, value, other_cell, other_value)
 
 if __name__ == '__main__':
     ###
@@ -108,11 +108,13 @@ if __name__ == '__main__':
         return cell[0] != other_cell[0] and cell[1] != other_cell[1] and box(cell) != box(other_cell)
     indices = [(i, j) for i in range(9) for j in range(9)]
     def print_sudoku(solution):
-        values = list(map(str, solution.values()))
+        assert sorted(solution.keys()) == indices
+        values = [str(v) for k, v in sorted(solution.items())]
         for row in range(9):
             print(f'{" ".join(values[row*9:row*9+3])} | {" ".join(values[row*9+3:row*9+6])} | {" ".join(values[row*9+6:row*9+9])}')
             if row % 3 == 2 and row != 8:
                 print('-' * 21)
+        print()
 
     cell_candidates = dict(zip(indices, [
         [6],[2],[4],[5],[3],[9],[1],[8],[7],
@@ -129,30 +131,63 @@ if __name__ == '__main__':
     for solution in solve(cell_candidates, is_sudoku_pair_valid):
         print_sudoku(solution)
 
-
-    for i, solution in zip(range(100), solve(empty, is_sudoku_pair_valid)):
+    print("10 Sudokus from scratch:")
+    for i, solution in zip(range(10), solve(empty, is_sudoku_pair_valid)):
         print_sudoku(solution)
-    exit()
+    #exit()
     # Miracle Sudoku
     # https://www.youtube.com/watch?v=yKf9aUIxdb4
-    kings_moves = lambda p: [(p[0]+x, p[1]+y) for x, y in product([-1, 0, 1], [-1, 0, 1]) if x or y]
-    knights_moves = lambda p: [(p[0]+x, p[1]+y) for x, y in chain(product([-1, 1], [-2, 2]), product([-2, 2], [-1, 1]))]
     is_orthogonal = lambda p, q: abs(p[0]-q[0]) + abs(p[1]-q[1]) == 1
+    is_kings_move = lambda p, q: abs(p[0]-q[0]) <= 1 and abs(p[1]-q[1]) <= 1
+    is_knights_move = lambda p, q: sorted([abs(p[0]-q[0]), abs(p[1]-q[1])]) == [1, 2]
     def is_miracle_sudoku_pair_valid(cell, value, other_cell, other_value):
         if not is_sudoku_pair_valid(cell, value, other_cell, other_value): return False
         if is_orthogonal(cell, other_cell) and abs(value - other_value) == 1: return False
-        if value == other_value and other_cell in chain(kings_moves(cell), knights_moves(cell)): return False
+        if value == other_value and (is_kings_move(cell, other_cell) or is_knights_move(cell, other_cell)): return False
         return True
-    indices = [(i, j) for i in range(9) for j in range(9)]
+    import re
+    canonical_solution = dict(zip(indices, map(int, re.findall(r'\d', """
+483 726 159
+726 159 483
+159 483 726
+
+837 261 594
+261 594 837
+594 837 261
+
+372 615 948
+615 948 372
+948 372 615
+    """))))
+    validate(canonical_solution, is_miracle_sudoku_pair_valid)
     cell_candidates = dict({index: range(1, 10) for index in indices})
-    cell_candidates[(3, 5)] = [1]
-    cell_candidates[(7, 6)] = [2]
+    cell_candidates[(4, 2)] = [1]
+    cell_candidates[(5, 6)] = [2]
     for solution in solve(cell_candidates, is_miracle_sudoku_pair_valid):
         print('Miracle found!')
-        pprint(solution)
+        print_sudoku(solution)
+        assert solution == canonical_solution
+    # https://www.youtube.com/watch?v=Tv-48b-KuxI
     cell_candidates = dict({index: range(1, 10) for index in indices})
-    cell_candidates[(4, 2)] = [4]
-    cell_candidates[(2, 3)] = [2]
+    cell_candidates[(3, 2)] = [3]
+    cell_candidates[(2, 4)] = [4]
     for solution in solve(cell_candidates, is_miracle_sudoku_pair_valid):
         print('Miracle 2 found!')
-        pprint(solution)
+        print_sudoku(solution)
+    # https://www.youtube.com/watch?v=8C-A7xmBLRU
+    cell_candidates = dict(zip(indices, [range(1, 10) if i == "0" else [int(i)] for i in re.findall(r'\d', """
+100 400 700
+020 050 080
+003 006 009
+
+010 040 070
+002 005 008
+900 300 600
+
+700 008 002
+800 200 900
+090 070 010
+    """)]))
+    for solution in solve(cell_candidates, is_sudoku_pair_valid):
+        print('Diabolical found!')
+        print_sudoku(solution)
