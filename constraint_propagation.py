@@ -1,33 +1,36 @@
 from random import random
 
-def propagate(cell, cell_candidates, is_pair_valid):
-    is_compatible = lambda other_cell, other_value: any(is_pair_valid(cell, value, other_cell, other_value) for value in cell_candidates[cell])
-    for other_cell, other_candidates in cell_candidates.items():
-        if other_cell == cell: continue
-        new_candidates = tuple(other_value for other_value in other_candidates if is_compatible(other_cell, other_value))
-        if not new_candidates: return False
-        cell_candidates[other_cell] = new_candidates
-        if len(other_candidates) != len(new_candidates) and not propagate(other_cell, cell_candidates, is_pair_valid): return False
-    return True
+def solve(cell_candidates, is_pair_valid, unpropagated_cells=None):
+    # If not provided, assume that no constraints have been propagated and that every cell must be checked.
+    if unpropagated_cells is None: unpropagated_cells = list(cell_candidates.keys())
 
-def guess_and_backtrack(cell_candidates, is_pair_valid):
+    # Use a stack instead of recursion so that we can more easily bail out of this guess with a `return`.
+    while unpropagated_cells:
+        cell = unpropagated_cells.pop(0)
+        candidates = cell_candidates[cell]
+        for other_cell, other_candidates in cell_candidates.items():
+            if other_cell == cell: continue
+            is_value_allowed = lambda other_value: any(is_pair_valid(cell, value, other_cell, other_value) for value in candidates)
+            new_candidates = tuple(filter(is_value_allowed, other_candidates))
+            if not new_candidates: return
+            cell_candidates[other_cell] = new_candidates
+            # Only propagating solved cells (`len(new_candidates) == 1`) is an unnecessary restriction
+            # and leads to extra candidates, but in practice is several times faster than propagating
+            # every change in candidates.
+            if len(other_candidates) > len(new_candidates) == 1: unpropagated_cells.append(other_cell)
+
     pending = [(cell, candidates) for cell, candidates in cell_candidates.items() if len(candidates) != 1]
-    if not pending:
+    if pending:
+        # Select the most constrained cell to guess. Sacrifices lexical ordering of solutions
+        # to achieve orders of magnitude better performance.
+        pending_cell, candidates = min(pending, key=lambda p: len(p[1]))
+        for value in candidates:
+            # Potentially expensive, but cheaper than trying to undo changes to candidate lists.
+            cell_candidates_copy = cell_candidates.copy()
+            cell_candidates_copy[pending_cell] = (value,)
+            yield from solve(cell_candidates_copy, is_pair_valid, [pending_cell])
+    else:
         yield {cell: candidates[0] for cell, candidates in cell_candidates.items()}
-        return
-
-    pending_cell, candidates = min(pending, key=lambda p: len(p[1])) # TODO: is selecting the cell with fewest candidates the best strategy?
-    for value in candidates:
-        cell_candidates_copy = cell_candidates.copy()
-        cell_candidates_copy[pending_cell] = (value,)
-        if propagate(pending_cell, cell_candidates_copy, is_pair_valid):
-            yield from guess_and_backtrack(cell_candidates_copy, is_pair_valid)
-
-def solve(cell_candidates, is_pair_valid):
-    for cell, candidates in cell_candidates.items():
-        assert propagate(cell, cell_candidates, is_pair_valid)
-
-    return guess_and_backtrack(cell_candidates, is_pair_valid)
 
 def validate(solution, is_pair_valid):
     for cell, value in solution.items():
