@@ -12,7 +12,6 @@ def propagate(cell, value, cell_candidates, is_pair_valid):
     return True
 
 def guess_and_backtrack(cell_candidates, is_pair_valid):
-    print('.', end='', flush=True)
     try:
         pending_cell, candidates = next((cell, candidates) for cell, candidates in cell_candidates.items() if len(candidates) != 1)
     except StopIteration:
@@ -60,19 +59,10 @@ if __name__ == '__main__':
             if part_a == part_b: return False
 
         if GREEN in value and WHITE in other_value and other_cell != cell + 1: return False
-        if WHITE in value and GREEN in other_value and other_cell != cell - 1: return False
-
         if BLENDS in value and CATS in other_value and not is_neighbor(cell, other_cell): return False
-        if CATS in value and BLENDS in other_value and not is_neighbor(cell, other_cell): return False
-
         if HORSES in value and DUNHILL in other_value and not is_neighbor(cell, other_cell): return False
-        if DUNHILL in value and HORSES in other_value and not is_neighbor(cell, other_cell): return False
-
         if BLENDS in value and WATER in other_value and not is_neighbor(cell, other_cell): return False
-        if WATER in value and BLENDS in other_value and not is_neighbor(cell, other_cell): return False
-
         if NORWEGIAN in value and BLUE in other_value and not is_neighbor(cell, other_cell): return False
-        if BLUE in value and NORWEGIAN in other_value and not is_neighbor(cell, other_cell): return False
 
         return True
 
@@ -112,7 +102,7 @@ if __name__ == '__main__':
     for solution in solve(cell_candidates, is_zebra_pair_valid):
         assert all((FISH in value) == (GERMAN in value) for value in solution.values()), solution
         pprint(solution)
-
+    exit()
     ###
     box = lambda p: (p[0] // 3, p[1] // 3)
     def is_sudoku_pair_valid(cell, value, other_cell, other_value):
