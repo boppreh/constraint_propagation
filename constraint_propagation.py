@@ -1,23 +1,26 @@
 from random import random
 
-def solve(cell_candidates, is_pair_valid, unpropagated_cells=None):
+def solve(cell_candidates, is_pair_valid=None, is_state_valid=None, unpropagated_cells=None):
     # If not provided, assume that no constraints have been propagated and that every cell must be checked.
     if unpropagated_cells is None: unpropagated_cells = list(cell_candidates.keys())
 
     # Use a stack instead of recursion so that we can more easily bail out of this guess with a `return`.
     while unpropagated_cells:
         cell = unpropagated_cells.pop(0)
-        candidates = cell_candidates[cell]
-        for other_cell, other_candidates in cell_candidates.items():
-            if other_cell == cell: continue
-            is_value_allowed = lambda other_value: any(is_pair_valid(cell, value, other_cell, other_value) for value in candidates)
-            new_candidates = tuple(filter(is_value_allowed, other_candidates))
-            if not new_candidates: return
-            cell_candidates[other_cell] = new_candidates
-            # Only propagating solved cells (`len(new_candidates) == 1`) is an unnecessary restriction
-            # and leads to extra candidates, but in practice is several times faster than propagating
-            # every change in candidates.
-            if len(other_candidates) > len(new_candidates) == 1: unpropagated_cells.append(other_cell)
+        if is_state_valid and not is_state_valid(cell, cell_candidates):
+            return
+        if is_pair_valid is not None:
+            candidates = cell_candidates[cell]
+            for other_cell, other_candidates in cell_candidates.items():
+                if other_cell == cell: continue
+                is_value_allowed = lambda other_value: any(is_pair_valid(cell, value, other_cell, other_value) for value in candidates)
+                new_candidates = tuple(filter(is_value_allowed, other_candidates))
+                if not new_candidates: return
+                cell_candidates[other_cell] = new_candidates
+                # Only propagating solved cells (`len(new_candidates) == 1`) is an unnecessary restriction
+                # and leads to extra candidates, but in practice is several times faster than propagating
+                # every change in candidates.
+                if len(other_candidates) > len(new_candidates) == 1: unpropagated_cells.append(other_cell)
 
     pending = [(cell, candidates) for cell, candidates in cell_candidates.items() if len(candidates) != 1]
     if pending:
@@ -28,7 +31,7 @@ def solve(cell_candidates, is_pair_valid, unpropagated_cells=None):
             # Potentially expensive, but cheaper than trying to undo changes to candidate lists.
             cell_candidates_copy = cell_candidates.copy()
             cell_candidates_copy[pending_cell] = (value,)
-            yield from solve(cell_candidates_copy, is_pair_valid, [pending_cell])
+            yield from solve(cell_candidates_copy, is_pair_valid, is_state_valid, [pending_cell])
     else:
         yield {cell: candidates[0] for cell, candidates in cell_candidates.items()}
 
@@ -39,12 +42,41 @@ def validate(solution, is_pair_valid):
             assert is_pair_valid(cell, value, other_cell, other_value), (cell, value, other_cell, other_value)
 
 if __name__ == '__main__':
-    ###
-    #https://web.stanford.edu/~laurik/fsmbook/examples/Einstein'sPuzzle.html
-
     from itertools import product, chain
     from pprint import pprint
 
+    # Magic square
+    n = 3
+    equal_sum = n * (n**2+1) / 2
+    def is_state_valid(cell, cell_candidates):
+        row, col = cell
+        lines = []
+        lines.append([(i, col) for i in range(n)])
+        lines.append([(row, i) for i in range(n)])
+        if row == col: lines.append([(i, i) for i in range(n)])
+        if row == n - col - 1: lines.append([(i, n - i - 1) for i in range(n)])
+        for cell_line in lines:
+            min_sum = sum(min(cell_candidates[cell]) for cell in cell_line)
+            max_sum = sum(max(cell_candidates[cell]) for cell in cell_line)
+            if min_sum > equal_sum or max_sum < equal_sum:
+                #print([cell_candidates[cell] for cell in cell_line], min_sum, max_sum, equal_sum)
+                return False
+        return True
+    indices = [(i, j) for i in range(n) for j in range(n)]
+    def print_magic_square(solution):
+        assert sorted(solution.keys()) == indices
+        values = [str(v) for k, v in sorted(solution.items())]
+        for row in range(n):
+            print(' '.join(values[row*n:row*n+n]))
+        print()
+    cell_candidates = {i: range(1, n**2+1) for i in indices}
+    for solution in solve(cell_candidates, is_pair_valid=lambda c, v, cc, vv: v != vv, is_state_valid=is_state_valid):
+        print_magic_square(solution)
+    exit()
+
+
+    ###
+    #https://web.stanford.edu/~laurik/fsmbook/examples/Einstein'sPuzzle.html
     BLUE, GREEN, RED, WHITE, YELLOW, BRIT, DANE, GERMAN, NORWEGIAN, SWEDE, BEER, COFFEE, MILK, TEA, WATER, BLENDS, BLUE_MASTER, DUNHILL, PALL_MALL, PRINCE, BIRDS, CATS, DOGS, HORSES, FISH = 'BLUE, GREEN, RED, WHITE, YELLOW, BRIT, DANE, GERMAN, NORWEGIAN, SWEDE, BEER, COFFEE, MILK, TEA, WATER, BLENDS, BLUE_MASTER, DUNHILL, PALL_MALL, PRINCE, BIRDS, CATS, DOGS, HORSES, FISH'.split(', ')
 
     colors = {BLUE, GREEN, RED, WHITE, YELLOW}
