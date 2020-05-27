@@ -14,12 +14,7 @@ def solve(cell_candidates, is_pair_valid=None, is_state_valid=None, unpropagated
 
 ```py
 from constraint_propagation import solve
-
-box = lambda p: (p[0] // 3, p[1] // 3) # Compute which of the 9 boxes a point belongs to.
-def is_sudoku_pair_valid(cell, value, other_cell, other_value):
-    """" Tests if a pair of cells and their values are valid according to Sudoku rules. """
-    if value != other_value: return True
-    return cell[0] != other_cell[0] and cell[1] != other_cell[1] and box(cell) != box(other_cell)
+from collections import namedtuple
 
 def print_sudoku(solution):
     print("""
@@ -36,15 +31,10 @@ def print_sudoku(solution):
 {} {} {} | {} {} {} | {} {} {}
 """.format(*solution.values()))
 
-indices = [(i, j) for i in range(9) for j in range(9)]
-empty_board = {p: range(1, 10) for p in indices}
-
-print("Generate 10 Sudokus solutions from scratch:")
-for i, solution in zip(range(10), solve(empty_board, is_sudoku_pair_valid)):
-    print_sudoku(solution)
-
+Cell = namedtuple('Cell', 'row col')
+empty_board = {Cell(row, col): range(1, 10) for row in range(9) for col in range(9)}
 # Diabolical Sudoku, from https://www.youtube.com/watch?v=8C-A7xmBLRU
-cell_candidates = dict(zip(indices, [range(1, 10) if i == "_" else [int(i)] for i in """
+diabolical_sudoku = dict(zip(empty_board, [range(1, 10) if i == "_" else [int(i)] for i in """
 1 _ _  4 _ _  7 _ _
 _ 2 _  _ 5 _  _ 8 _
 _ _ 3  _ _ 6  _ _ 9
@@ -57,7 +47,18 @@ _ _ 2  _ _ 5  _ _ 8
 8 _ _  2 _ _  9 _ _
 _ 9 _  _ 7 _  _ 1 _
 """.split()]))
-for solution in solve(cell_candidates, is_sudoku_pair_valid):
+
+box = lambda p: (p.row // 3, p.col // 3) # Computes which of the 9 boxes a point belongs to.
+def is_sudoku_pair_valid(cell, value, other_cell, other_value):
+    """" Tests if a pair of cells and their values are valid according to Sudoku rules. """
+    if value != other_value: return True
+    return cell.row != other_cell.row and cell.col != other_cell.col and box(cell) != box(other_cell)
+
+print("Generate 10 Sudokus solutions from scratch:")
+for i, solution in zip(range(10), solve(empty_board, is_sudoku_pair_valid)):
+    print_sudoku(solution)
+
+for solution in solve(diabolical_sudoku, is_sudoku_pair_valid):
     print('Found the solution for the Diabolical Sudoku!')
     print_sudoku(solution)
 ```
