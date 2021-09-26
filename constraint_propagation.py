@@ -1,6 +1,8 @@
 from random import random
 
 def solve(cell_candidates, is_pair_valid=None, is_state_valid=None, unpropagated_cells=None):
+    """
+    """
     # If not provided, assume that no constraints have been propagated and that every cell must be checked.
     if unpropagated_cells is None: unpropagated_cells = list(cell_candidates.keys())
 
@@ -35,12 +37,6 @@ def solve(cell_candidates, is_pair_valid=None, is_state_valid=None, unpropagated
     else:
         yield {cell: candidates[0] for cell, candidates in cell_candidates.items()}
 
-def validate(solution, is_pair_valid):
-    for cell, value in solution.items():
-        for other_cell, other_value in solution.items():
-            if cell == other_cell: continue
-            assert is_pair_valid(cell, value, other_cell, other_value), (cell, value, other_cell, other_value)
-
 if __name__ == '__main__':
     from itertools import product, chain
     from pprint import pprint
@@ -72,8 +68,6 @@ if __name__ == '__main__':
     cell_candidates = {i: range(1, n**2+1) for i in indices}
     for solution in solve(cell_candidates, is_pair_valid=lambda c, v, cc, vv: v != vv, is_state_valid=is_state_valid):
         print_magic_square(solution)
-    exit()
-
 
     ###
     #https://web.stanford.edu/~laurik/fsmbook/examples/Einstein'sPuzzle.html
@@ -194,7 +188,6 @@ if __name__ == '__main__':
 615 948 372
 948 372 615
     """))))
-    validate(canonical_solution, is_miracle_sudoku_pair_valid)
     cell_candidates = dict({index: range(1, 10) for index in indices})
     cell_candidates[(4, 2)] = [1]
     cell_candidates[(5, 6)] = [2]
