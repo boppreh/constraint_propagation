@@ -1,4 +1,5 @@
 from random import random
+from itertools import product
 from collections import namedtuple
 
 def solve(cell_candidates, is_pair_valid=None, is_state_valid=None, unpropagated_cells=None):
@@ -38,7 +39,44 @@ def solve(cell_candidates, is_pair_valid=None, is_state_valid=None, unpropagated
     else:
         yield {cell: candidates[0] for cell, candidates in cell_candidates.items()}
 
-_SudokuCell = namedtuple('_SudokuCell', 'row col')
+
+GridLoc = namedtuple('GridLoc', 'row col')
+
+def _is_nonogram_pair_valid(cell, value, other_cell, other_value):
+    cell_type, i = cell
+    other_cell_type, j = other_cell
+
+    # Comparison of row and row, or col and col, are not necessary.
+    if cell_type == other_cell_type: return i != j or value == other_value
+    # Check if the intersection of the row and col has the same value.
+    return value[j] == other_value[i]
+def _generate_valid_nonogram_lines(n, filled_group_sizes):
+    assert sum(filled_group_sizes) + len(filled_group_sizes) - 1 <= n
+    if len(filled_group_sizes) == 0: return [' ' * n]
+    if sum(filled_group_sizes) == n: return ['x' * n]
+
+    max_empty_group_size = n - sum(filled_group_sizes)
+    lines = []
+    # The first and last empty groups can have size 0, the other ones must have at least 1 empty cell in them.
+    for empty_group_sizes in product(range(0, max_empty_group_size+1), *([range(1, max_empty_group_size+1)] * (len(filled_group_sizes)-1)), range(0, max_empty_group_size+1)):
+        if sum(empty_group_sizes) + sum(filled_group_sizes) != n: continue
+        line = []
+        for empty_size, filled_size in zip(empty_group_sizes, filled_group_sizes):
+            line.extend(' ' * empty_size + 'x' * filled_size)
+        line.extend(' ' * empty_group_sizes[-1])
+        lines.append(line)
+    return lines
+
+def solve_nonogram(col_hints, row_hints):
+    n_rows = len(row_hints)
+    n_cols = len(col_hints)
+    assert all(sum(entry)+len(entry)-1 <= n_rows for entry in col_hints)
+    assert all(sum(entry)+len(entry)-1 <= n_cols for entry in row_hints)
+
+    cell_candidates = {('row', i): _generate_valid_nonogram_lines(n_cols, hint) for i, hint in enumerate(row_hints)} | {('col', i): _generate_valid_nonogram_lines(n_rows, hint) for i, hint in enumerate(col_hints)}
+    solution = next(solve(cell_candidates, is_pair_valid=_is_nonogram_pair_valid))
+    return '\n'.join(''.join(values) for (cell_type, _), values in solution.items() if cell_type == 'row')
+
 def _is_sudoku_pair_valid(cell, value, other_cell, other_value):
     """" Tests if a pair of cells and their values are valid according to Sudoku rules. """
     return value != other_value or (
@@ -63,7 +101,7 @@ def _sudoku_solution_to_str(solution):
         {} {} {} | {} {} {} | {} {} {}
         {} {} {} | {} {} {} | {} {} {}
         """.format(*solution.values())
-def solve_sudoku(puzzle):
+def solve_sudoku(str_puzzle):
     """
     Given an ASCII representation of a Sudoku board with 0-9 and _ for unknown cells, returns
     an equivalent ASCII representation of the solved board. Whitespace is ignored.
@@ -82,27 +120,31 @@ def solve_sudoku(puzzle):
     8 _ _  2 _ _  9 _ _
     _ 9 _  _ 7 _  _ 1 _
     """
-    assert isinstance(puzzle, str) and all(char in '01234567890_ \n' for char in puzzle) and len(puzzle.split()) == 9 * 9, 'Invalid puzzle string'
+    assert isinstance(str_puzzle, str) and all(char in '01234567890_ \n' for char in str_puzzle) and len(str_puzzle.split()) == 9 * 9, 'Invalid puzzle string'
 
 
-    empty_board = {_SudokuCell(row, col): range(1, 10) for row in range(9) for col in range(9)}
-    puzzle = dict(zip(empty_board, [range(1, 10) if i == "_" else [int(i)] for i in puzzle.split()]))
+    empty_board = {GridLoc(row, col): range(1, 10) for row in range(9) for col in range(9)}
+    puzzle = dict(zip(empty_board, [range(1, 10) if i == "_" else [int(i)] for i in str_puzzle.split()]))
 
     solutions = solve(puzzle, is_pair_valid=_is_sudoku_pair_valid)
 
     # The solution will be in the form {(row, column): number}, but since the
     # positions are ordered we can ignore them and just print the numbers in
     # sequence.
-    return _sudoku_solution_to_str(next(solution))
+    return _sudoku_solution_to_str(next(solutions))
 
 if __name__ == '__main__':
-    from itertools import product
     from pprint import pprint
+
+    # Nonogram from the CSS puzzle
+    # https://cohost.org/blackle/post/260204-div-style-width-60
+    print(solve_nonogram([[4], [6], [1, 1, 4], [1, 1, 1, 2], [1, 1, 2], [1, 1], [1, 1], [4]], [[4], [1, 1], [4, 1], [2, 1], [5, 1], [3, 1], [4, 1], [4]]))
+    print()
 
     # Magic square
     n = 3
     equal_sum = n * (n**2+1) / 2
-    def is_state_valid(cell, cell_candidates):
+    def is_magic_square_valid(cell, cell_candidates):
         row, col = cell
         lines = []
         lines.append([(i, col) for i in range(n)])
@@ -124,7 +166,7 @@ if __name__ == '__main__':
             print(' '.join(values[row*n:row*n+n]))
         print()
     cell_candidates = {i: range(1, n**2+1) for i in indices}
-    for solution in solve(cell_candidates, is_pair_valid=lambda c, v, cc, vv: v != vv, is_state_valid=is_state_valid):
+    for solution in solve(cell_candidates, is_pair_valid=lambda c, v, cc, vv: v != vv, is_state_valid=is_magic_square_valid):
         print_magic_square(solution)
 
     ###
@@ -190,8 +232,26 @@ if __name__ == '__main__':
 
     ### Sudoku
 
+    # Solve the second Sudoku from the CSS puzzle at
+    # https://cohost.org/blackle/post/260204-div-style-width-60
+    print('CSS Puzzle Sudoku #2:')
+    print(solve_sudoku("""
+    1 _ 7  3 _ _  _ 6 9
+    _ 2 6  _ _ 1  4 5 _
+    _ _ _  _ _ _  7 _ 2
+
+    6 _ 2  _ 5 9  1 _ 4
+    7 _ _  2 1 4  _ _ _
+    5 1 _  _ _ 3  2 9 _
+
+    _ _ 1  _ _ 8  5 _ 7
+    4 _ 3  _ _ _  _ 8 _
+    _ 8 _  6 _ _  3 _ _
+    """))
+    print()
+
     # Define a completely empty board and the candidates (numbers 1-9) for each cell.
-    empty_board = {_SudokuCell(row, col): range(1, 10) for row in range(9) for col in range(9)}
+    empty_board = {GridLoc(row, col): range(1, 10) for row in range(9) for col in range(9)}
 
     # Generate 10 Sudoku solutions by solving an empty board.
     for i, solution in zip(range(10), solve(empty_board, _is_sudoku_pair_valid)):
