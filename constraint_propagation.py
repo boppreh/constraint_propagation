@@ -1,4 +1,5 @@
 from random import random
+from collections import namedtuple
 
 def solve(cell_candidates, is_pair_valid=None, is_state_valid=None, unpropagated_cells=None):
     """
@@ -37,8 +38,65 @@ def solve(cell_candidates, is_pair_valid=None, is_state_valid=None, unpropagated
     else:
         yield {cell: candidates[0] for cell, candidates in cell_candidates.items()}
 
+_SudokuCell = namedtuple('_SudokuCell', 'row col')
+def _is_sudoku_pair_valid(cell, value, other_cell, other_value):
+    """" Tests if a pair of cells and their values are valid according to Sudoku rules. """
+    return value != other_value or (
+        cell.row != other_cell.row
+        and cell.col != other_cell.col
+        and (cell.row // 3, cell.col // 3) != (other_cell.row // 3, other_cell.col // 3)
+    )
+def _sudoku_solution_to_str(solution):
+        # The solution will be in the form {(row, column): number}, but since the
+        # positions are ordered we can ignore them and just print the numbers in
+        # sequence.
+        return """
+        {} {} {} | {} {} {} | {} {} {}
+        {} {} {} | {} {} {} | {} {} {}
+        {} {} {} | {} {} {} | {} {} {}
+        ---------------------
+        {} {} {} | {} {} {} | {} {} {}
+        {} {} {} | {} {} {} | {} {} {}
+        {} {} {} | {} {} {} | {} {} {}
+        ---------------------
+        {} {} {} | {} {} {} | {} {} {}
+        {} {} {} | {} {} {} | {} {} {}
+        {} {} {} | {} {} {} | {} {} {}
+        """.format(*solution.values())
+def solve_sudoku(puzzle):
+    """
+    Given an ASCII representation of a Sudoku board with 0-9 and _ for unknown cells, returns
+    an equivalent ASCII representation of the solved board. Whitespace is ignored.
+
+    Example valid puzzle:
+
+    1 _ _  4 _ _  7 _ _
+    _ 2 _  _ 5 _  _ 8 _
+    _ _ 3  _ _ 6  _ _ 9
+
+    _ 1 _  _ 4 _  _ 7 _
+    _ _ 2  _ _ 5  _ _ 8
+    9 _ _  3 _ _  6 _ _
+
+    7 _ _  _ _ 8  _ _ 2
+    8 _ _  2 _ _  9 _ _
+    _ 9 _  _ 7 _  _ 1 _
+    """
+    assert isinstance(puzzle, str) and all(char in '01234567890_ \n' for char in puzzle) and len(puzzle.split()) == 9 * 9, 'Invalid puzzle string'
+
+
+    empty_board = {_SudokuCell(row, col): range(1, 10) for row in range(9) for col in range(9)}
+    puzzle = dict(zip(empty_board, [range(1, 10) if i == "_" else [int(i)] for i in puzzle.split()]))
+
+    solutions = solve(puzzle, is_pair_valid=_is_sudoku_pair_valid)
+
+    # The solution will be in the form {(row, column): number}, but since the
+    # positions are ordered we can ignore them and just print the numbers in
+    # sequence.
+    return _sudoku_solution_to_str(next(solution))
+
 if __name__ == '__main__':
-    from itertools import product, chain
+    from itertools import product
     from pprint import pprint
 
     # Magic square
@@ -129,93 +187,79 @@ if __name__ == '__main__':
     for solution in solve(cell_candidates, is_zebra_pair_valid):
         assert all((FISH in value) == (GERMAN in value) for value in solution.values()), solution
         pprint(solution)
-    
-    ###
-    box = lambda p: (p[0] // 3, p[1] // 3)
-    def is_sudoku_pair_valid(cell, value, other_cell, other_value):
-        if value != other_value: return True
-        return cell[0] != other_cell[0] and cell[1] != other_cell[1] and box(cell) != box(other_cell)
-    indices = [(i, j) for i in range(9) for j in range(9)]
-    def print_sudoku(solution):
-        assert sorted(solution.keys()) == indices
-        values = [str(v) for k, v in sorted(solution.items())]
-        for row in range(9):
-            print(f'{" ".join(values[row*9:row*9+3])} | {" ".join(values[row*9+3:row*9+6])} | {" ".join(values[row*9+6:row*9+9])}')
-            if row % 3 == 2 and row != 8:
-                print('-' * 21)
-        print()
 
-    cell_candidates = dict(zip(indices, [
-        [6],[2],[4],[5],[3],[9],[1],[8],[7],
-        [5],[1],range(1,10),[7],[2],[8],[6],[3],[4],
-        [8],[3],[7],[6],[1],[4],[2],[9],[5],
-        [1],[4],[3],[8],[6],[5],[7],[2],[9],
-        [9],range(1,10),[8],range(1,10),[4],[7],[3],[6],[1],
-        [7],[6],[2],[3],[9],[1],[4],[5],[8],
-        [3],[7],[1],[9],[5],[6],[8],[4],[2],
-        [4],range(1,10),[6],[1],[8],[2],range(1,10),[7],[3],
-        [2],[8],range(1,10),[4],[7],[3],[9],[1],[6],
-    ]))
-    empty = {p: range(1, 10) for p in indices}
-    for solution in solve(cell_candidates, is_sudoku_pair_valid):
-        print_sudoku(solution)
+    ### Sudoku
 
-    print("10 Sudokus from scratch:")
-    for i, solution in zip(range(10), solve(empty, is_sudoku_pair_valid)):
-        print_sudoku(solution)
-    #exit()
-    # Miracle Sudoku
+    # Define a completely empty board and the candidates (numbers 1-9) for each cell.
+    empty_board = {_SudokuCell(row, col): range(1, 10) for row in range(9) for col in range(9)}
+
+    # Generate 10 Sudoku solutions by solving an empty board.
+    for i, solution in zip(range(10), solve(empty_board, _is_sudoku_pair_valid)):
+        print(f"Example Sudoku board number {i+1}")
+        print(_sudoku_solution_to_str(solution))
+
+
+    # Diabolical Sudoku, from https://www.youtube.com/watch?v=8C-A7xmBLRU
+    # Reuse the (row, column) tuples from the empty board with the values from the
+    # literal string below.
+    diabolical_sudoku = dict(zip(empty_board, [range(1, 10) if i == "_" else [int(i)] for i in """
+    1 _ _  4 _ _  7 _ _
+    _ 2 _  _ 5 _  _ 8 _
+    _ _ 3  _ _ 6  _ _ 9
+
+    _ 1 _  _ 4 _  _ 7 _
+    _ _ 2  _ _ 5  _ _ 8
+    9 _ _  3 _ _  6 _ _
+
+    7 _ _  _ _ 8  _ _ 2
+    8 _ _  2 _ _  9 _ _
+    _ 9 _  _ 7 _  _ 1 _
+    """.split()]))
+
+    for solution in solve(diabolical_sudoku, _is_sudoku_pair_valid):
+        print('Found the solution for the Diabolical Sudoku!')
+        print(_sudoku_solution_to_str(solution))
+
+
+    # Miracle Sudoku, has extra restrictions.
     # https://www.youtube.com/watch?v=yKf9aUIxdb4
-    is_orthogonal = lambda p, q: abs(p[0]-q[0]) + abs(p[1]-q[1]) == 1
-    is_kings_move = lambda p, q: abs(p[0]-q[0]) <= 1 and abs(p[1]-q[1]) <= 1
-    is_knights_move = lambda p, q: sorted([abs(p[0]-q[0]), abs(p[1]-q[1])]) == [1, 2]
     def is_miracle_sudoku_pair_valid(cell, value, other_cell, other_value):
-        if not is_sudoku_pair_valid(cell, value, other_cell, other_value): return False
-        if is_orthogonal(cell, other_cell) and abs(value - other_value) == 1: return False
-        if value == other_value and (is_kings_move(cell, other_cell) or is_knights_move(cell, other_cell)): return False
+        if not _is_sudoku_pair_valid(cell, value, other_cell, other_value): return False
+
+        is_sequential = abs(value - other_value) == 1
+        d_row, d_col = abs(cell.row - other_cell.row), abs(cell.col - other_cell.col)
+        is_orthogonal = d_row + d_col == 1
+        is_kings_move = d_row + d_col <= 2
+        is_knights_move = sorted([d_row, d_col]) == [1, 2]
+
+        if is_sequential and is_orthogonal: return False
+        if value == other_value and (is_kings_move or is_knights_move): return False
         return True
-    import re
-    canonical_solution = dict(zip(indices, map(int, re.findall(r'\d', """
-483 726 159
-726 159 483
-159 483 726
 
-837 261 594
-261 594 837
-594 837 261
+    # Only these 2 given numbers are required to have a unique solution.
+    miracle_sudoku = {**empty_board, (4, 2): [1], (5, 6): [2]}
 
-372 615 948
-615 948 372
-948 372 615
-    """))))
-    cell_candidates = dict({index: range(1, 10) for index in indices})
-    cell_candidates[(4, 2)] = [1]
-    cell_candidates[(5, 6)] = [2]
-    for solution in solve(cell_candidates, is_miracle_sudoku_pair_valid):
-        print('Miracle found!')
-        print_sudoku(solution)
-        assert solution == canonical_solution
-    # https://www.youtube.com/watch?v=Tv-48b-KuxI
-    cell_candidates = dict({index: range(1, 10) for index in indices})
-    cell_candidates[(3, 2)] = [3]
-    cell_candidates[(2, 4)] = [4]
-    for solution in solve(cell_candidates, is_miracle_sudoku_pair_valid):
-        print('Miracle 2 found!')
-        print_sudoku(solution)
-    # https://www.youtube.com/watch?v=8C-A7xmBLRU
-    cell_candidates = dict(zip(indices, [range(1, 10) if i == "0" else [int(i)] for i in re.findall(r'\d', """
-100 400 700
-020 050 080
-003 006 009
+    for solution in solve(miracle_sudoku, is_miracle_sudoku_pair_valid):
+        print('Found the solution for the Miracle Sudoku!')
+        print(_sudoku_solution_to_str(solution))
 
-010 040 070
-002 005 008
-900 300 600
 
-700 008 002
-800 200 900
-090 070 010
-    """)]))
-    for solution in solve(cell_candidates, is_sudoku_pair_valid):
-        print('Diabolical found!')
-        print_sudoku(solution)
+    # No Xing - "Another Sudoku Breakthrough: Man Vs Machine"
+    # https://www.youtube.com/watch?v=5q94_FcnYMI
+    noxing_sudoku = dict(zip(empty_board, [range(1, 10) if i == "_" else [int(i)] for i in """
+    6 _ _  5 _ 4  3 _ _
+    _ _ 9  _ _ _  _ _ _
+    1 _ _  _ _ _  _ _ 5
+
+    8 _ _  _ 5 3  _ _ 6
+    _ 6 5  _ _ 7  _ _ _
+    4 _ _  9 _ _  _ _ 7
+
+    _ 1 _  _ 4 _  _ 9 _
+    _ _ 2  _ 8 _  _ _ _
+    _ _ _  3 _ 5  2 _ 4
+    """.split()]))
+
+    for solution in solve(noxing_sudoku, _is_sudoku_pair_valid):
+        print('Found the solution for the No Xing Sudoku!')
+        print(_sudoku_solution_to_str(solution))
