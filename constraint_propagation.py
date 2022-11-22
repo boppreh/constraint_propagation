@@ -66,8 +66,23 @@ def _generate_valid_nonogram_lines(n, filled_group_sizes):
         line.extend(' ' * empty_group_sizes[-1])
         lines.append(line)
     return lines
-
 def solve_nonogram(col_hints, row_hints):
+    """
+    Solves a black-and-white Nonogram and returns the grid representation. Column hints and row hints should
+    be the list of hints for each column and row. For example, for the following Nonogram:
+
+        1
+        1 1 3
+    1 1 x   x
+      2   x x
+    1 1 x   x
+
+    >>> solve_nonogram([[1, 1], [1], [3]], [[1, 1], [2], [1, 1]])
+    x x
+     xx
+    x x
+
+    """
     n_rows = len(row_hints)
     n_cols = len(col_hints)
     assert all(sum(entry)+len(entry)-1 <= n_rows for entry in col_hints)
