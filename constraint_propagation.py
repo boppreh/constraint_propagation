@@ -42,10 +42,11 @@ def solve(cell_candidates, is_pair_valid=None, unpropagated_cells=None):
 
 def solve_nonogram(col_hints, row_hints):
     """
-    Solves a black-and-white Nonogram and returns the grid representation. Column hints and row hints should
-    be the list of hints for each column and row.
+    Solves a black-and-white Nonogram/Picross and returns all solution grids as strings.
+    Column hints and row hints should be the numbers representing filled group lengths
+    for each column and row.
 
-    For example, to solve the following Nonogram:
+    For example, this Nonogram:
 
           1
           1 1 3
@@ -55,21 +56,44 @@ def solve_nonogram(col_hints, row_hints):
     1 1 | x   x |
          -------
 
-    >>> solve_nonogram([[1, 1], [1], [3]], [[1, 1], [2], [1, 1]])
-    x x
-     xx
-    x x
+    can be encoded as:
+
+    >>> solve_nonogram(
+            [[1, 1], [1], [3]],
+            [[1, 1], [2], [1, 1]]
+        )
+
+        x x
+         xx
+        x x
 
     """
-    def _is_nonogram_pair_valid(cell, value, other_cell, other_value):
+    # Nonograms require more global checks than sudoku, so the encoding is
+    # different: instead of encoding each cell in the grid with a constraint,
+    # we encode whole rows and columns, overlapping grid cells and all.
+    #
+    # This requires an extra constraint that a row and a column must have the same
+    # cells in their intersection, but it drastically reduces the number of candidates
+    # by only allowing rows and columns that are valid according to the hints.
+    def is_pair_valid(cell, value, other_cell, other_value):
+        # Cell can be for example ('row', 5) or ('col', 0).
         cell_type, i = cell
         other_cell_type, j = other_cell
-
-        # Comparison of row and row, or col and col, are not necessary.
-        if cell_type == other_cell_type: return i != j or value == other_value
+        # We should never have to compare a row or column to itself.
+        assert not (cell_type == other_cell_type and i == j)
         # Check if the intersection of the row and col has the same value.
-        return value[j] == other_value[i]
-    def _generate_valid_nonogram_lines(n, filled_group_sizes):
+        return cell_type == other_cell_type or value[j] == other_value[i]
+    def generate_valid_lines(n, filled_group_sizes):
+        """
+        Given a length and hints, generates all valid lines (rows or columns).
+        For example n=5 and filled_group_sizes=[2, 1] should generate:
+
+        [
+            ' xx x',
+            'xx  x',
+            'xx x ',
+        ]
+        """
         assert sum(filled_group_sizes) + len(filled_group_sizes) - 1 <= n
         if len(filled_group_sizes) == 0: return [' ' * n]
         if sum(filled_group_sizes) == n: return ['x' * n]
@@ -85,46 +109,80 @@ def solve_nonogram(col_hints, row_hints):
             line.extend(' ' * empty_group_sizes[-1])
             lines.append(line)
         return lines
+    def solution_to_str(solution):
+        """ Converts a nonogram dict solution to an ASCII grid. """
+        return '\n\t' + '\n\t'.join(''.join(values) for (cell_type, _), values in solution.items() if cell_type == 'row') + '\n'
 
     n_rows = len(row_hints)
     n_cols = len(col_hints)
+    # Ensure hints don't have obvious contradictions:
     assert all(sum(entry)+len(entry)-1 <= n_rows for entry in col_hints)
     assert all(sum(entry)+len(entry)-1 <= n_cols for entry in row_hints)
 
-    cell_candidates = {('row', i): _generate_valid_nonogram_lines(n_cols, hint) for i, hint in enumerate(row_hints)} | {('col', i): _generate_valid_nonogram_lines(n_rows, hint) for i, hint in enumerate(col_hints)}
-    solution = next(solve(cell_candidates, is_pair_valid=_is_nonogram_pair_valid))
-    return '\n\t' + '\n\t'.join(''.join(values) for (cell_type, _), values in solution.items() if cell_type == 'row') + '\n'
+    cell_candidates = {
+        **{('row', i): generate_valid_lines(n_cols, hint) for i, hint in enumerate(row_hints)},
+        **{('col', i): generate_valid_lines(n_rows, hint) for i, hint in enumerate(col_hints)},
+    }
+    solutions = solve(cell_candidates, is_pair_valid=is_pair_valid)
+    return map(solution_to_str, solutions)
 
-def solve_sudoku(str_puzzle, n_solutions=1, extra_pairwise_rules=lambda cell, value, other_cell, other_value: True):
+def solve_sudoku(str_puzzle, extra_pairwise_rules=lambda cell, value, other_cell, other_value: True):
     """
-    Given an ASCII representation of a Sudoku board with 0-9 and _ for unknown cells, returns
-    an equivalent ASCII representation of the solved board. Whitespace is ignored.
+    Given an string representing a Sudoku board, with cells represented by 1-9 or _ for unknown spots, returns
+    all solutions as string grids.
 
-    Return as many as `n_solutions`, or all solutions if `n_solutions` is -1.
+    Characters other than 1-9 and _ in the input string are ignored, so all the
+    following inputs are valid and equivalent:
 
-    Example valid puzzle:
+    Shortest:
+        1__4__7___2__5__8___3__6__9_1__4__7___2__5__89__3__6__7____8__28__2__9___9__7__1_
 
-    1 _ _  4 _ _  7 _ _
-    _ 2 _  _ 5 _  _ 8 _
-    _ _ 3  _ _ 6  _ _ 9
+    Compact:
+        1__4__7__
+        _2__5__8_
+        __3__6__9
+        _1__4__7_
+        __2__5__8
+        9__3__6__
+        7____8__2
+        8__2__9__
+        _9__7__1_
 
-    _ 1 _  _ 4 _  _ 7 _
-    _ _ 2  _ _ 5  _ _ 8
-    9 _ _  3 _ _  6 _ _
+    Spaces between cells:
+        1 _ _  4 _ _  7 _ _
+        _ 2 _  _ 5 _  _ 8 _
+        _ _ 3  _ _ 6  _ _ 9
 
-    7 _ _  _ _ 8  _ _ 2
-    8 _ _  2 _ _  9 _ _
-    _ 9 _  _ 7 _  _ 1 _
+        _ 1 _  _ 4 _  _ 7 _
+        _ _ 2  _ _ 5  _ _ 8
+        9 _ _  3 _ _  6 _ _
+
+        7 _ _  _ _ 8  _ _ 2
+        8 _ _  2 _ _  9 _ _
+        _ 9 _  _ 7 _  _ 1 _
+
+    Full ASCII table:
+        1 _ _ | 4 _ _ | 7 _ _
+        _ 2 _ | _ 5 _ | _ 8 _
+        _ _ 3 | _ _ 6 | _ _ 9
+        ----------------------
+        _ 1 _ | _ 4 _ | _ 7 _
+        _ _ 2 | _ _ 5 | _ _ 8
+        9 _ _ | 3 _ _ | 6 _ _
+        ----------------------
+        7 _ _ | _ _ 8 | _ _ 2
+        8 _ _ | 2 _ _ | 9 _ _
+        _ 9 _ | _ 7 _ | _ 1 _
     """
     Cell = namedtuple('Cell', 'row col')
-    def _is_sudoku_pair_valid(cell, value, other_cell, other_value):
+    def is_pair_valid(cell, value, other_cell, other_value):
         """" Tests if a pair of cells and their values are valid according to Sudoku rules. """
         return (value != other_value or (
             cell.row != other_cell.row
             and cell.col != other_cell.col
             and (cell.row // 3, cell.col // 3) != (other_cell.row // 3, other_cell.col // 3)
         )) and extra_pairwise_rules(cell, value, other_cell, other_value)
-    def _sudoku_solution_to_str(solution):
+    def solution_to_str(solution):
             # The solution will be in the form {(row, column): number}, but since the
             # positions are ordered we can ignore them and just print the numbers in
             # sequence.
@@ -149,9 +207,9 @@ def solve_sudoku(str_puzzle, n_solutions=1, extra_pairwise_rules=lambda cell, va
     empty_board = {Cell(row, col): range(1, 10) for row in range(9) for col in range(9)}
     puzzle = dict(zip(empty_board, [range(1, 10) if i == "_" else [int(i)] for i in str_cells]))
 
-    solutions = solve(puzzle, is_pair_valid=_is_sudoku_pair_valid)
+    solutions = solve(puzzle, is_pair_valid=is_pair_valid)
 
-    return [_sudoku_solution_to_str(solution) for _, solution in (enumerate(solutions) if n_solutions == -1 else zip(range(n_solutions), solutions))]
+    return map(solution_to_str, solutions)
 
 if __name__ == '__main__':
     from pprint import pprint
@@ -245,14 +303,14 @@ if __name__ == '__main__':
     for solution in solve(cell_candidates, is_zebra_pair_valid):
         assert all((FISH in value) == (GERMAN in value) for value in solution.values()), solution
         pprint(solution)
-    
+    print()
 
     ### Sudoku
 
     # Solve the second Sudoku from the CSS puzzle at
     # https://cohost.org/blackle/post/260204-div-style-width-60
     print('CSS Puzzle Sudoku #2:')
-    print(*solve_sudoku("""
+    print(next(solve_sudoku("""
     1 _ 7  3 _ _  _ 6 9
     _ 2 6  _ _ 1  4 5 _
     _ _ _  _ _ _  7 _ 2
@@ -264,7 +322,7 @@ if __name__ == '__main__':
     _ _ 1  _ _ 8  5 _ 7
     4 _ 3  _ _ _  _ 8 _
     _ 8 _  6 _ _  3 _ _
-    """))
+    """)))
     print()
 
     empty_sudoku = """
@@ -281,7 +339,7 @@ if __name__ == '__main__':
     _ _ _ | _ _ _ | _ _ _
     """
     # Generate 10 Sudoku boards by solving an empty board.
-    for i, solution in enumerate(solve_sudoku(empty_sudoku, n_solutions=10), start=1):
+    for i, solution in zip(range(1, 11), solve_sudoku(empty_sudoku)):
         print(f"Example Sudoku board number {i}")
         print(solution)
 
@@ -303,7 +361,7 @@ if __name__ == '__main__':
     _ 9 _  _ 7 _  _ 1 _
     """
     print('Solution for the Diabolical Sudoku:')
-    print(*solve_sudoku(diabolical_sudoku))
+    print(next(solve_sudoku(diabolical_sudoku)))
 
 
     # Miracle Sudoku, has extra restrictions.
@@ -332,7 +390,7 @@ if __name__ == '__main__':
     _ _ _ | _ _ _ | _ _ _
     """
     print('Solution for the Miracle Sudoku:')
-    print(*solve_sudoku(miracle_sudoku, extra_pairwise_rules=is_miracle_sudoku_pair_valid))
+    print(next(solve_sudoku(miracle_sudoku, extra_pairwise_rules=is_miracle_sudoku_pair_valid)))
 
 
     # No Xing - "Another Sudoku Breakthrough: Man Vs Machine"
@@ -351,4 +409,4 @@ if __name__ == '__main__':
     _ _ _  3 _ 5  2 _ 4
     """
     print('Solution for the No Xing Sudoku:')
-    print(*solve_sudoku(noxing_sudoku))
+    print(next(solve_sudoku(noxing_sudoku)))
