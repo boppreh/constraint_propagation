@@ -3,41 +3,69 @@ from random import random
 from itertools import product, permutations
 from collections import namedtuple
 
-def solve(candidates_by_key, is_pair_valid, unpropagated_keys=None):
+def solve(candidates_by_key, is_pair_valid):
     """
-    """
-    # If not provided, assume that no constraints have been propagated and that every key must be checked.
-    if unpropagated_keys is None:
-        unpropagated_keys = list(candidates_by_key.keys())
+    Given {key: list_of_candidates} and a function to check if two candidates
+    are compatible, returns all possible {key: candidate} mappings that satisfy
+    the given constraints.
 
+    Parameters:
+
+    candidates_by_key: a dictionary of {key: list_of_candidates}. The key can be
+    any valid map key, like an ID, a name, or a grid position (row, col). The list
+    of candidates must be a list of all valid values for that key.
+
+    is_pair_valid: a function that, given (key, value, other_key, other_value),
+    returns True if that pair satisfies the constraints for the given problem.
+    In a Sudoku board, for example, this would check that equal numbers are not
+    in the same row, column, or block.
+
+
+    Output:
+
+    A generator of {key: candidate}, where `candidate` is an element of the input
+    `candidates_by_key[key]`, and all pairwise combinations of keys and candidates
+    satisfy the given constraints.
+    """
+    return _propagate_and_solve(candidates_by_key, is_pair_valid, list(candidates_by_key.keys()))
+
+def _propagate_and_solve(candidates_by_key, is_pair_valid, unpropagated_keys):
     # Use a stack instead of recursion so that we can more easily bail out of this guess with a `return`.
     while unpropagated_keys:
         key = unpropagated_keys.pop(0)
         candidates = candidates_by_key[key]
         for other_key, other_candidates in candidates_by_key.items():
             if other_key == key: continue
-            is_value_allowed = lambda other_value: any(is_pair_valid(key, value, other_key, other_value) for value in candidates)
-            new_candidates = tuple(filter(is_value_allowed, other_candidates))
-            if not new_candidates: return
+            is_compatible = lambda other_value: any(is_pair_valid(key, value, other_key, other_value) for value in candidates)
+            # Filter invalid combinations.
+            new_candidates = tuple(filter(is_compatible, other_candidates))
+            if not new_candidates:
+                # A key has no candidates, this combination is invalid. Bail out.
+                return
+            if len(other_candidates) == len(new_candidates):
+                # No progress on this key, skip.
+                continue
             candidates_by_key[other_key] = new_candidates
-            # Only propagating solved keys (`len(new_candidates) == 1`) is an unnecessary restriction
-            # and leads to extra candidates, but in practice is several times faster than propagating
-            # every change in candidates.
-            if len(other_candidates) > len(new_candidates) == 1: unpropagated_keys.append(other_key)
+            if len(new_candidates) == 1:
+                # Only propagating solved keys (`len(new_candidates) == 1`) is an unnecessary restriction
+                # and leads to extra candidates, but in practice is several times faster than propagating
+                # every change in candidates.
+                unpropagated_keys.append(other_key)
 
     pending = [(key, candidates) for key, candidates in candidates_by_key.items() if len(candidates) != 1]
-    if pending:
+
+    if len(pending) == 0:
+        yield {key: candidates[0] for key, candidates in candidates_by_key.items()}
+    else:
         # Select the most constrained key to guess. Sacrifices lexical ordering of solutions
         # to achieve orders of magnitude better performance.
         pending_key, candidates = min(pending, key=lambda p: len(p[1]))
         for value in candidates:
             # Potentially expensive, but cheaper than trying to undo changes to candidate lists.
             candidates_by_key_copy = candidates_by_key.copy()
+            # Make a guess and recurse!
             candidates_by_key_copy[pending_key] = (value,)
-            yield from solve(candidates_by_key_copy, is_pair_valid, [pending_key])
-    else:
-        yield {key: candidates[0] for key, candidates in candidates_by_key.items()}
-
+            yield from _propagate_and_solve(candidates_by_key_copy, is_pair_valid, [pending_key])
 
 def solve_nonogram(col_hints, row_hints):
     """
