@@ -3,7 +3,7 @@ from random import random
 from itertools import product, permutations
 from collections import namedtuple
 
-def solve(candidates_by_key, is_pair_valid=None, unpropagated_keys=None):
+def solve(candidates_by_key, is_pair_valid, unpropagated_keys=None):
     """
     """
     # If not provided, assume that no constraints have been propagated and that every key must be checked.
@@ -13,18 +13,17 @@ def solve(candidates_by_key, is_pair_valid=None, unpropagated_keys=None):
     # Use a stack instead of recursion so that we can more easily bail out of this guess with a `return`.
     while unpropagated_keys:
         key = unpropagated_keys.pop(0)
-        if is_pair_valid is not None:
-            candidates = candidates_by_key[key]
-            for other_key, other_candidates in candidates_by_key.items():
-                if other_key == key: continue
-                is_value_allowed = lambda other_value: any(is_pair_valid(key, value, other_key, other_value) for value in candidates)
-                new_candidates = tuple(filter(is_value_allowed, other_candidates))
-                if not new_candidates: return
-                candidates_by_key[other_key] = new_candidates
-                # Only propagating solved keys (`len(new_candidates) == 1`) is an unnecessary restriction
-                # and leads to extra candidates, but in practice is several times faster than propagating
-                # every change in candidates.
-                if len(other_candidates) > len(new_candidates) == 1: unpropagated_keys.append(other_key)
+        candidates = candidates_by_key[key]
+        for other_key, other_candidates in candidates_by_key.items():
+            if other_key == key: continue
+            is_value_allowed = lambda other_value: any(is_pair_valid(key, value, other_key, other_value) for value in candidates)
+            new_candidates = tuple(filter(is_value_allowed, other_candidates))
+            if not new_candidates: return
+            candidates_by_key[other_key] = new_candidates
+            # Only propagating solved keys (`len(new_candidates) == 1`) is an unnecessary restriction
+            # and leads to extra candidates, but in practice is several times faster than propagating
+            # every change in candidates.
+            if len(other_candidates) > len(new_candidates) == 1: unpropagated_keys.append(other_key)
 
     pending = [(key, candidates) for key, candidates in candidates_by_key.items() if len(candidates) != 1]
     if pending:
