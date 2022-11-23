@@ -1,19 +1,18 @@
 import re
 from random import random
-from itertools import product
+from itertools import product, permutations
 from collections import namedtuple
 
-def solve(cell_candidates, is_pair_valid=None, is_state_valid=None, unpropagated_cells=None):
+def solve(cell_candidates, is_pair_valid=None, unpropagated_cells=None):
     """
     """
     # If not provided, assume that no constraints have been propagated and that every cell must be checked.
-    if unpropagated_cells is None: unpropagated_cells = list(cell_candidates.keys())
+    if unpropagated_cells is None:
+        unpropagated_cells = list(cell_candidates.keys())
 
     # Use a stack instead of recursion so that we can more easily bail out of this guess with a `return`.
     while unpropagated_cells:
         cell = unpropagated_cells.pop(0)
-        if is_state_valid and not is_state_valid(cell, cell_candidates):
-            return
         if is_pair_valid is not None:
             candidates = cell_candidates[cell]
             for other_cell, other_candidates in cell_candidates.items():
@@ -36,7 +35,7 @@ def solve(cell_candidates, is_pair_valid=None, is_state_valid=None, unpropagated
             # Potentially expensive, but cheaper than trying to undo changes to candidate lists.
             cell_candidates_copy = cell_candidates.copy()
             cell_candidates_copy[pending_cell] = (value,)
-            yield from solve(cell_candidates_copy, is_pair_valid, is_state_valid, [pending_cell])
+            yield from solve(cell_candidates_copy, is_pair_valid, [pending_cell])
     else:
         yield {cell: candidates[0] for cell, candidates in cell_candidates.items()}
 
@@ -162,33 +161,29 @@ if __name__ == '__main__':
     print('Solution for Nonogram')
     print(solve_nonogram([[4], [6], [1, 1, 4], [1, 1, 1, 2], [1, 1, 2], [1, 1], [1, 1], [4]], [[4], [1, 1], [4, 1], [2, 1], [5, 1], [3, 1], [4, 1], [4]]))
 
-    print('Magic square solutions')
+    # Magic Squares
     n = 3
-    equal_sum = n * (n**2+1) / 2
-    def is_magic_square_valid(cell, cell_candidates):
-        row, col = cell
-        lines = []
-        lines.append([(i, col) for i in range(n)])
-        lines.append([(row, i) for i in range(n)])
-        if row == col: lines.append([(i, i) for i in range(n)])
-        if row == n - col - 1: lines.append([(i, n - i - 1) for i in range(n)])
-        for cell_line in lines:
-            min_sum = sum(min(cell_candidates[cell]) for cell in cell_line)
-            max_sum = sum(max(cell_candidates[cell]) for cell in cell_line)
-            if min_sum > equal_sum or max_sum < equal_sum:
-                #print([cell_candidates[cell] for cell in cell_line], min_sum, max_sum, equal_sum)
-                return False
+    magic_constant = n * (n**2+1) / 2
+    valid_lines = [line for line in permutations(range(1, 10), r=3) if sum(line) == magic_constant]
+    cell_candidates = {
+        **{((i, 0), (i, 1), (i, 2)): valid_lines for i in range(3)},
+        **{((0, i), (1, i), (2, i)): valid_lines for i in range(3)},
+        ((0, 0), (1, 1), (2, 2)): valid_lines,
+        ((0, 2), (1, 1), (2, 0)): valid_lines,
+    }
+    def is_magic_square_pair_valid(cell, value, other_cell, other_value):
+        for pair in cell:
+            if pair in other_cell:
+                return value[cell.index(pair)] == other_value[other_cell.index(pair)]
         return True
-    indices = [(i, j) for i in range(n) for j in range(n)]
-    def print_magic_square(solution):
-        assert sorted(solution.keys()) == indices
-        values = [str(v) for k, v in sorted(solution.items())]
-        for row in range(n):
-            print(' '.join(values[row*n:row*n+n]))
-        print()
-    cell_candidates = {i: range(1, n**2+1) for i in indices}
-    for solution in solve(cell_candidates, is_pair_valid=lambda c, v, cc, vv: v != vv, is_state_valid=is_magic_square_valid):
-        print_magic_square(solution)
+    print('Magic square solution')
+    solution = next(solve(cell_candidates, is_pair_valid=is_magic_square_pair_valid))
+    grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+    for pairs, values in solution.items():
+        for (row, col), value in zip(pairs, values):
+            grid[row][col] = value
+    print('\t' + '\n\t'.join(' '.join(map(str, row)) for row in grid))
+    print()
 
     ###
     #https://web.stanford.edu/~laurik/fsmbook/examples/Einstein'sPuzzle.html
@@ -250,6 +245,7 @@ if __name__ == '__main__':
     for solution in solve(cell_candidates, is_zebra_pair_valid):
         assert all((FISH in value) == (GERMAN in value) for value in solution.values()), solution
         pprint(solution)
+    
 
     ### Sudoku
 
