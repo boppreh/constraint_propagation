@@ -3,41 +3,41 @@ from random import random
 from itertools import product, permutations
 from collections import namedtuple
 
-def solve(cell_candidates, is_pair_valid=None, unpropagated_cells=None):
+def solve(candidates_by_key, is_pair_valid=None, unpropagated_keys=None):
     """
     """
-    # If not provided, assume that no constraints have been propagated and that every cell must be checked.
-    if unpropagated_cells is None:
-        unpropagated_cells = list(cell_candidates.keys())
+    # If not provided, assume that no constraints have been propagated and that every key must be checked.
+    if unpropagated_keys is None:
+        unpropagated_keys = list(candidates_by_key.keys())
 
     # Use a stack instead of recursion so that we can more easily bail out of this guess with a `return`.
-    while unpropagated_cells:
-        cell = unpropagated_cells.pop(0)
+    while unpropagated_keys:
+        key = unpropagated_keys.pop(0)
         if is_pair_valid is not None:
-            candidates = cell_candidates[cell]
-            for other_cell, other_candidates in cell_candidates.items():
-                if other_cell == cell: continue
-                is_value_allowed = lambda other_value: any(is_pair_valid(cell, value, other_cell, other_value) for value in candidates)
+            candidates = candidates_by_key[key]
+            for other_key, other_candidates in candidates_by_key.items():
+                if other_key == key: continue
+                is_value_allowed = lambda other_value: any(is_pair_valid(key, value, other_key, other_value) for value in candidates)
                 new_candidates = tuple(filter(is_value_allowed, other_candidates))
                 if not new_candidates: return
-                cell_candidates[other_cell] = new_candidates
-                # Only propagating solved cells (`len(new_candidates) == 1`) is an unnecessary restriction
+                candidates_by_key[other_key] = new_candidates
+                # Only propagating solved keys (`len(new_candidates) == 1`) is an unnecessary restriction
                 # and leads to extra candidates, but in practice is several times faster than propagating
                 # every change in candidates.
-                if len(other_candidates) > len(new_candidates) == 1: unpropagated_cells.append(other_cell)
+                if len(other_candidates) > len(new_candidates) == 1: unpropagated_keys.append(other_key)
 
-    pending = [(cell, candidates) for cell, candidates in cell_candidates.items() if len(candidates) != 1]
+    pending = [(key, candidates) for key, candidates in candidates_by_key.items() if len(candidates) != 1]
     if pending:
-        # Select the most constrained cell to guess. Sacrifices lexical ordering of solutions
+        # Select the most constrained key to guess. Sacrifices lexical ordering of solutions
         # to achieve orders of magnitude better performance.
-        pending_cell, candidates = min(pending, key=lambda p: len(p[1]))
+        pending_key, candidates = min(pending, key=lambda p: len(p[1]))
         for value in candidates:
             # Potentially expensive, but cheaper than trying to undo changes to candidate lists.
-            cell_candidates_copy = cell_candidates.copy()
-            cell_candidates_copy[pending_cell] = (value,)
-            yield from solve(cell_candidates_copy, is_pair_valid, [pending_cell])
+            candidates_by_key_copy = candidates_by_key.copy()
+            candidates_by_key_copy[pending_key] = (value,)
+            yield from solve(candidates_by_key_copy, is_pair_valid, [pending_key])
     else:
-        yield {cell: candidates[0] for cell, candidates in cell_candidates.items()}
+        yield {key: candidates[0] for key, candidates in candidates_by_key.items()}
 
 
 def solve_nonogram(col_hints, row_hints):
@@ -75,14 +75,14 @@ def solve_nonogram(col_hints, row_hints):
     # This requires an extra constraint that a row and a column must have the same
     # cells in their intersection, but it drastically reduces the number of candidates
     # by only allowing rows and columns that are valid according to the hints.
-    def is_pair_valid(cell, value, other_cell, other_value):
-        # Cell can be for example ('row', 5) or ('col', 0).
-        cell_type, i = cell
-        other_cell_type, j = other_cell
+    def is_pair_valid(key, value, other_key, other_value):
+        # Key can be for example ('row', 5) or ('col', 0).
+        key_type, i = key
+        other_key_type, j = other_key
         # We should never have to compare a row or column to itself.
-        assert not (cell_type == other_cell_type and i == j)
+        assert not (key_type == other_key_type and i == j)
         # Check if the intersection of the row and col has the same value.
-        return cell_type == other_cell_type or value[j] == other_value[i]
+        return key_type == other_key_type or value[j] == other_value[i]
     def generate_valid_lines(n, filled_group_sizes):
         """
         Given a length and hints, generates all valid lines (rows or columns).
@@ -119,14 +119,14 @@ def solve_nonogram(col_hints, row_hints):
     assert all(sum(entry)+len(entry)-1 <= n_rows for entry in col_hints)
     assert all(sum(entry)+len(entry)-1 <= n_cols for entry in row_hints)
 
-    cell_candidates = {
+    candidates_by_key = {
         **{('row', i): generate_valid_lines(n_cols, hint) for i, hint in enumerate(row_hints)},
         **{('col', i): generate_valid_lines(n_rows, hint) for i, hint in enumerate(col_hints)},
     }
-    solutions = solve(cell_candidates, is_pair_valid=is_pair_valid)
+    solutions = solve(candidates_by_key, is_pair_valid=is_pair_valid)
     return map(solution_to_str, solutions)
 
-def solve_sudoku(str_puzzle, extra_pairwise_rules=lambda cell, value, other_cell, other_value: True):
+def solve_sudoku(str_puzzle, extra_pairwise_rules=lambda key, value, other_key, other_value: True):
     """
     Given an string representing a Sudoku board, with cells represented by 1-9 or _ for unknown spots, returns
     all solutions as string grids.
@@ -174,14 +174,14 @@ def solve_sudoku(str_puzzle, extra_pairwise_rules=lambda cell, value, other_cell
         8 _ _ | 2 _ _ | 9 _ _
         _ 9 _ | _ 7 _ | _ 1 _
     """
-    Cell = namedtuple('Cell', 'row col')
-    def is_pair_valid(cell, value, other_cell, other_value):
+    Pos = namedtuple('Pos', 'row col')
+    def is_pair_valid(key, value, other_key, other_value):
         """" Tests if a pair of cells and their values are valid according to Sudoku rules. """
         return (value != other_value or (
-            cell.row != other_cell.row
-            and cell.col != other_cell.col
-            and (cell.row // 3, cell.col // 3) != (other_cell.row // 3, other_cell.col // 3)
-        )) and extra_pairwise_rules(cell, value, other_cell, other_value)
+            key.row != other_key.row
+            and key.col != other_key.col
+            and (key.row // 3, key.col // 3) != (other_key.row // 3, other_key.col // 3)
+        )) and extra_pairwise_rules(key, value, other_key, other_value)
     def solution_to_str(solution):
             # The solution will be in the form {(row, column): number}, but since the
             # positions are ordered we can ignore them and just print the numbers in
@@ -204,7 +204,7 @@ def solve_sudoku(str_puzzle, extra_pairwise_rules=lambda cell, value, other_cell
     assert len(str_cells) == 9 * 9, 'Invalid Sudoku string, should contain 0-9 and _ for unknown cells.'
 
 
-    empty_board = {Cell(row, col): range(1, 10) for row in range(9) for col in range(9)}
+    empty_board = {Pos(row, col): range(1, 10) for row in range(9) for col in range(9)}
     puzzle = dict(zip(empty_board, [range(1, 10) if i == "_" else [int(i)] for i in str_cells]))
 
     solutions = solve(puzzle, is_pair_valid=is_pair_valid)
@@ -223,19 +223,19 @@ if __name__ == '__main__':
     n = 3
     magic_constant = n * (n**2+1) / 2
     valid_lines = [line for line in permutations(range(1, 10), r=3) if sum(line) == magic_constant]
-    cell_candidates = {
+    candidates_by_key = {
         **{((i, 0), (i, 1), (i, 2)): valid_lines for i in range(3)},
         **{((0, i), (1, i), (2, i)): valid_lines for i in range(3)},
         ((0, 0), (1, 1), (2, 2)): valid_lines,
         ((0, 2), (1, 1), (2, 0)): valid_lines,
     }
-    def is_magic_square_pair_valid(cell, value, other_cell, other_value):
-        for pair in cell:
-            if pair in other_cell:
-                return value[cell.index(pair)] == other_value[other_cell.index(pair)]
+    def is_magic_square_pair_valid(key, value, other_key, other_value):
+        for pair in key:
+            if pair in other_key:
+                return value[key.index(pair)] == other_value[other_key.index(pair)]
         return True
     print('Magic square solution')
-    solution = next(solve(cell_candidates, is_pair_valid=is_magic_square_pair_valid))
+    solution = next(solve(candidates_by_key, is_pair_valid=is_magic_square_pair_valid))
     grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
     for pairs, values in solution.items():
         for (row, col), value in zip(pairs, values):
@@ -253,17 +253,17 @@ if __name__ == '__main__':
     cigarettes = {BLENDS, BLUE_MASTER, DUNHILL, PALL_MALL, PRINCE}
     pets = {BIRDS, CATS, DOGS, HORSES, FISH}
 
-    is_neighbor = lambda cell_a, cell_b: abs(cell_a - cell_b) == 1
-    def is_zebra_pair_valid(cell, value, other_cell, other_value):
+    is_neighbor = lambda key_a, key_b: abs(key_a - key_b) == 1
+    def is_zebra_pair_valid(key, value, other_key, other_value):
         # Uniqueness.
         for part_a, part_b in zip(value, other_value):
             if part_a == part_b: return False
 
-        if GREEN in value and WHITE in other_value and other_cell != cell + 1: return False
-        if BLENDS in value and CATS in other_value and not is_neighbor(cell, other_cell): return False
-        if HORSES in value and DUNHILL in other_value and not is_neighbor(cell, other_cell): return False
-        if BLENDS in value and WATER in other_value and not is_neighbor(cell, other_cell): return False
-        if NORWEGIAN in value and BLUE in other_value and not is_neighbor(cell, other_cell): return False
+        if GREEN in value and WHITE in other_value and other_key != key + 1: return False
+        if BLENDS in value and CATS in other_value and not is_neighbor(key, other_key): return False
+        if HORSES in value and DUNHILL in other_value and not is_neighbor(key, other_key): return False
+        if BLENDS in value and WATER in other_value and not is_neighbor(key, other_key): return False
+        if NORWEGIAN in value and BLUE in other_value and not is_neighbor(key, other_key): return False
 
         return True
 
@@ -298,9 +298,9 @@ if __name__ == '__main__':
         return True
 
     all_combinations = tuple(product(colors, nationalities, drinks, cigarettes, pets))
-    cell_candidates = {i: [c for c in all_combinations if is_combination_valid(i, c)] for i in range(1, 6)}
+    candidates_by_key = {i: [c for c in all_combinations if is_combination_valid(i, c)] for i in range(1, 6)}
 
-    for solution in solve(cell_candidates, is_zebra_pair_valid):
+    for solution in solve(candidates_by_key, is_zebra_pair_valid):
         assert all((FISH in value) == (GERMAN in value) for value in solution.values()), solution
         pprint(solution)
     print()
@@ -366,9 +366,9 @@ if __name__ == '__main__':
 
     # Miracle Sudoku, has extra restrictions.
     # https://www.youtube.com/watch?v=yKf9aUIxdb4
-    def is_miracle_sudoku_pair_valid(cell, value, other_cell, other_value):
+    def is_miracle_sudoku_pair_valid(key, value, other_key, other_value):
         is_sequential = abs(value - other_value) == 1
-        d_row, d_col = abs(cell.row - other_cell.row), abs(cell.col - other_cell.col)
+        d_row, d_col = abs(key.row - other_key.row), abs(key.col - other_key.col)
         is_orthogonal = d_row + d_col == 1
         is_kings_move = d_row + d_col <= 2
         is_knights_move = sorted([d_row, d_col]) == [1, 2]
